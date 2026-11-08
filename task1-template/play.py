@@ -99,7 +99,7 @@ if guess:
         )
         st.rerun()
 
-if st.session_state.guess_count == 3:
+if st.session_state.guess_count == 4:
     st.warning(
         "You have used all your guesses. The correct answer was "
         f"{st.session_state.goal['name']}."
