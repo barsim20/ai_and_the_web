@@ -99,6 +99,15 @@ if guess:
         )
         st.rerun()
 
+if st.session_state.guess_count == 3:
+    st.warning(
+        "You have used all your guesses. The correct answer was "
+        f"{st.session_state.goal['name']}."
+    )
+    st.session_state.game_over = True
+    st.session_state.games_played += 1
+    st.session_state.guesses_per_game.append(st.session_state.guess_count)
+
 if st.session_state.game_over and st.button("Start a new game"):
     start_game()
     st.rerun()
