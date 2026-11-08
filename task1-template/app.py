@@ -1,7 +1,9 @@
 import streamlit as st
 
-st.title("Hello world")
-st.slider("Select a number", 0, 100, 25)
-st.button("Click me")
+from navigation import show_navigation
 
-st.write("This is my first web app.")
+
+st.set_page_config(page_title="Football Guessing Game", page_icon="⚽")
+
+page = show_navigation()
+page.run()
