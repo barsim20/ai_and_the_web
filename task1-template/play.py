@@ -1,13 +1,14 @@
 import json
 import os
 import random
+from pathlib import Path
 from urllib import error, request
 
 from dotenv import load_dotenv
 import streamlit as st
 
 
-load_dotenv()
+load_dotenv(Path(__file__).with_name(".env"))
 
 LITELLM_BASE_URL = os.getenv("LITELLM_BASE_URL", "")
 LITELLM_API_KEY = os.getenv("LITELLM_API_KEY", "")
