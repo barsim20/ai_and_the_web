@@ -1,18 +1,19 @@
-import json
 import os
 import random
 from pathlib import Path
-from urllib import error, request
 
 from dotenv import load_dotenv
+from openai import OpenAI
 import streamlit as st
 
 
 load_dotenv(Path(__file__).with_name(".env"))
 
-LITELLM_BASE_URL = os.getenv("LITELLM_BASE_URL", "")
-LITELLM_API_KEY = os.getenv("LITELLM_API_KEY", "")
-MODEL_NAME = os.getenv("MODEL_NAME", "")
+LITELLM_BASE_URL = os.getenv(
+    "LITELLM_BASE_URL", "https://litellm.uni-osnabrueck.de/v1"
+)
+LLM_API_KEY = os.getenv("LLM_API_KEY") or os.getenv("LITELLM_API_KEY", "")
+MODEL_NAME = os.getenv("MODEL_NAME", "google/gemma-4-E4B-it")
 
 
 PLAYERS = [
@@ -24,59 +25,42 @@ PLAYERS = [
 
 def ask_llm():
     """Send the complete conversation to the LiteLLM gateway."""
-    if not LITELLM_BASE_URL or not LITELLM_API_KEY or not MODEL_NAME:
+    if not LLM_API_KEY:
+        st.session_state.llm_error = (
+            "LLM_API_KEY is missing from the .env file."
+        )
         return None
-
-    endpoint = LITELLM_BASE_URL.rstrip("/")
-    if not endpoint.endswith("/chat/completions"):
-        endpoint += "/chat/completions"
 
     system_prompt = f"""
 You are the conversation partner in a friendly football player guessing game.
 The hidden player is {st.session_state.goal}.
 You must lead the entire conversation. Give useful hints, react naturally to
 the user's messages, and never let the user change the hidden player.
-When the user correctly guesses the player, congratulate them and set game_over
-to true. Otherwise set game_over to false.
-Return only valid JSON with exactly these keys:
-{{"reply": "your message to the user", "game_over": false}}
+When the user correctly guesses the player, congratulate them and append the
+exact marker [GAME_WON] to your response. Do not use this marker otherwise.
 Keep the reply under 60 words.
 """.strip()
 
-    payload = {
-        "model": MODEL_NAME,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            *st.session_state.messages,
-        ],
-        "temperature": 0.7,
-        "response_format": {"type": "json_object"},
-    }
-
     try:
-        http_request = request.Request(
-            endpoint,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={
-                "Authorization": f"Bearer {LITELLM_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            method="POST",
+        client = OpenAI(
+            base_url=LITELLM_BASE_URL,
+            api_key=LLM_API_KEY,
         )
-        with request.urlopen(http_request, timeout=30) as response:
-            result = json.loads(response.read().decode("utf-8"))
-        content = result["choices"][0]["message"]["content"]
-        return json.loads(content)
-    except (
-        error.HTTPError,
-        error.URLError,
-        KeyError,
-        IndexError,
-        json.JSONDecodeError,
-        OSError,
-        TypeError,
-        UnicodeDecodeError,
-    ):
+        response = client.chat.completions.create(
+            model=MODEL_NAME,
+            max_tokens=1000,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                *st.session_state.messages,
+            ],
+        )
+        content = response.choices[0].message.content or ""
+        game_over = content.endswith("[GAME_WON]")
+        if game_over:
+            content = content[: -len("[GAME_WON]")].rstrip()
+        return {"reply": content, "game_over": game_over}
+    except Exception as exc:
+        st.session_state.llm_error = f"LiteLLM request failed: {exc}"
         return None
 
 
@@ -90,10 +74,7 @@ def start_game():
     first_message = ask_llm()
     if first_message is None:
         first_message = {
-            "reply": (
-                "The LLM is not configured yet. Add the LiteLLM settings "
-                "to your .env file."
-            ),
+            "reply": "LLM unavailable: " + st.session_state.llm_error,
             "game_over": False,
         }
     st.session_state.messages.append(
@@ -130,7 +111,7 @@ if guess:
         response = ask_llm()
         if response is None:
             response = {
-                "reply": "I could not reach the LLM. Please check your settings.",
+                "reply": "LLM unavailable: " + st.session_state.llm_error,
                 "game_over": False,
             }
 
